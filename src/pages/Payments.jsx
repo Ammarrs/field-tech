@@ -5,7 +5,7 @@ import { Badge, Card, DataTable, EmptyState, Field, KpiCard, Modal, PageHeader }
 import { PAY_STATUS, monthSummary } from '../lib/calc';
 import { money, monthKey, monthLabel, shiftMonth, today, weekLabel } from '../lib/format';
 
-// Confirmation modal for recording a payment. Keyed by target so state resets per open.
+// Confirmation modal for recording a payment.
 function ReceiveModal({ title, due, entry, coverLabel, onSave, onClose }) {
   const [amount, setAmount] = useState(entry?.amount ? String(entry.amount) : '');
   const [covered, setCovered] = useState(!!entry?.covered);
@@ -96,8 +96,8 @@ export default function Payments() {
 
   const COLUMNS = [
     { key: 'start', label: 'الأسبوع', render: (w) => weekLabel(w.start) },
-    { key: 'printers', label: 'الطابعات' },
-    { key: 'earned', label: 'الشغل', render: (w) => money(w.earned) },
+    { key: 'printers', label: 'الطابعات (في الشهر)' },
+    { key: 'earned', label: 'الشغل (في الشهر)', render: (w) => money(w.earned) },
     { key: 'advance', label: `الدفعة (${pct}%)`, render: (w) => money(w.advance) },
     { key: 'received', label: 'اتقبض', render: (w) => money(w.received) },
     {
@@ -113,7 +113,7 @@ export default function Payments() {
       type: 'week',
       key: w.start,
       title: `استلام أسبوع ${weekLabel(w.start)}`,
-      due: w.remaining,
+      due: w.weekRemaining,
       entry: w.entry,
       coverLabel: `ده غطى الدفعة الأسبوعية (${pct}%)`,
     });
@@ -158,17 +158,22 @@ export default function Payments() {
       </div>
 
       <Card title="الأسابيع">
+        <p className="meta">
+          الأرقام دي لأيام الشهر ده بس. الأسبوع اللي بيعدي على شهرين بيظهر في الاتنين، كل شهر بجزئه.
+        </p>
         {ms.weeks.length ? (
-          <DataTable
-            columns={COLUMNS}
-            rows={ms.weeks}
-            rowKey={(w) => w.start}
-            actions={(w) => (
-              <button className="btn small" onClick={() => openWeek(w)}>
-                {w.status === 'paid' ? 'تعديل' : 'تسجيل استلام'}
-              </button>
-            )}
-          />
+          <div className="mt">
+            <DataTable
+              columns={COLUMNS}
+              rows={ms.weeks}
+              rowKey={(w) => w.start}
+              actions={(w) => (
+                <button className="btn small" onClick={() => openWeek(w)}>
+                  {w.status === 'paid' ? 'تعديل' : 'تسجيل استلام'}
+                </button>
+              )}
+            />
+          </div>
         ) : (
           <EmptyState
             title="مفيش شغل في الشهر ده"
@@ -190,7 +195,11 @@ export default function Payments() {
           <span className="num">{money(ms.monthEndReceived)}</span>
         </div>
         <div className="mt">
-          <button className="btn primary" onClick={openMonth} disabled={ms.pending <= 0 && !ms.monthEntry}>
+          <button
+            className="btn primary"
+            onClick={openMonth}
+            disabled={ms.pending <= 0 && !ms.monthEntry}
+          >
             {ms.monthEntry?.amount || ms.monthEntry?.covered ? 'تعديل الاستلام' : 'تسجيل استلام آخر الشهر'}
           </button>
         </div>

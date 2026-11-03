@@ -403,3 +403,121 @@ p { margin: 0; }
 .kpi-clickable:focus-visible { outline: 2px solid var(--accent); }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+
+/* ---------- Typography: Cairo only, hierarchy by size and weight ---------- */
+:root {
+  --font: 'Cairo', system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+button, input, select, textarea { font-family: var(--font); }
+
+/* Level 1: page title */
+.page-title {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+}
+.page-head .muted {
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+/* Topbar: current page name */
+.topbar h1 { font-size: 22px; font-weight: 700; }
+
+/* Level 2: card and modal titles */
+.card-head h2 { font-size: 22px; font-weight: 700; line-height: 1.3; }
+.modal-head h3 { font-size: 22px; font-weight: 700; }
+.empty h3 { font-size: 20px; font-weight: 700; }
+.branch-card h3 { font-size: 19px; font-weight: 700; }
+
+/* Level 3: sub-section inside a card (الطابعات، الاستلام، ...) */
+.section-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 20px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Sidebar brand */
+.brand strong { font-size: 18px; font-weight: 800; }
+.brand small { font-size: 14px; font-weight: 500; }
+
+/* KPI cards: label, then big number */
+.kpi-label { font-size: 15px; font-weight: 600; color: var(--muted); }
+.kpi-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+}
+.kpi-hint { font-size: 14px; font-weight: 500; }
+
+/* Amount lines (monthly breakdown, payment modal) */
+.line { font-size: 16px; font-weight: 400; }
+.line .num {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.line.strong { font-size: 17px; font-weight: 700; }
+.line.strong .num { font-size: 18px; font-weight: 800; }
+
+/* Result bar (المتبقي للشهر) */
+.result { font-size: 20px; font-weight: 700; }
+.result .num {
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Period label (week / month navigation) */
+.period-label { font-size: 18px; font-weight: 700; }
+
+/* Tables */
+.table th { font-size: 14px; font-weight: 600; color: var(--muted); }
+.table td { font-size: 16px; font-weight: 400; }
+.table td strong { font-weight: 700; }
+.table td .num,
+.table td { font-variant-numeric: tabular-nums; }
+
+/* Buttons and form */
+.btn { font-size: 16px; font-weight: 700; }
+.btn.small { font-size: 15px; font-weight: 600; }
+.field { font-size: 15px; font-weight: 600; }
+.input { font-size: 16px; font-weight: 400; }
+.field-error { font-size: 14px; font-weight: 500; }
+
+/* Badges and hints */
+.badge { font-size: 14px; font-weight: 600; }
+.meta { font-size: 14px; font-weight: 500; color: var(--muted); }
+.muted { font-weight: 400; }
+
+/* Timeline */
+.timeline li strong { font-size: 16px; font-weight: 600; }
+
+/* Login card */
+.login-card .brand strong { font-size: 22px; font-weight: 800; }
+
+/* Mobile: slightly smaller so headings still fit on small screens */
+@media (max-width: 700px) {
+  .page-title { font-size: 28px; }
+  .card-head h2 { font-size: 20px; }
+  .kpi-value { font-size: 28px; }
+  .result { font-size: 18px; }
+  .result .num { font-size: 22px; }
+  .period-label { font-size: 16px; }
+}

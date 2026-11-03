@@ -1,4 +1,4 @@
-import { weekRange, monthKey, startOfWeek, money } from './format';
+import { weekRange, monthKey, startOfWeek } from './format';
 
 export const inRange = (iso, { start, end }) => iso >= start && iso <= end;
 
@@ -20,6 +20,7 @@ export function receivedFor(entry, due) {
 }
 
 // A week is identified by its Saturday start date.
+// This is the full week, used for the weekly payment record.
 export function weekSummary(state, anyDate) {
   const range = weekRange(anyDate);
   const items = state.installations.filter((i) => inRange(i.date, range));
@@ -48,11 +49,34 @@ export function weekSummary(state, anyDate) {
   };
 }
 
-// Month totals. Installations count toward the month of their week's Saturday.
+// Month = calendar month of each installation date (1st to last day).
+// A week that crosses into this month is split by how much of it falls in this month.
 export function monthSummary(state, mk) {
-  const installs = state.installations.filter((i) => monthKey(startOfWeek(i.date)) === mk);
+  const installs = state.installations.filter((i) => monthKey(i.date) === mk);
   const starts = [...new Set(installs.map((i) => startOfWeek(i.date)))].sort();
-  const weeks = starts.map((s) => weekSummary(state, s));
+
+  const weeks = starts.map((s) => {
+    const full = weekSummary(state, s);
+    const inMonth = installs.filter((i) => startOfWeek(i.date) === s);
+    const earned = inMonth.reduce((t, i) => t + installAmount(i), 0);
+    const printers = inMonth.reduce((t, i) => t + (Number(i.printers) || 0), 0);
+    const share = full.earned > 0 ? earned / full.earned : 0;
+    const advance = Math.round(full.advance * share);
+    const received = Math.round(full.received * share);
+    return {
+      start: full.start,
+      end: full.end,
+      printers,
+      earned,
+      advance,
+      balance: earned - advance,
+      received,
+      remaining: earned - received,
+      status: full.status,
+      entry: full.entry,
+      weekRemaining: full.remaining,
+    };
+  });
 
   const printers = installs.reduce((s, i) => s + (Number(i.printers) || 0), 0);
   const earned = installs.reduce((s, i) => s + installAmount(i), 0);
@@ -63,7 +87,6 @@ export function monthSummary(state, mk) {
   const received = weeksReceived + monthEndReceived;
   const pending = earned - received;
 
-  // Expenses count toward the calendar month of their date.
   const expenses = state.expenses.filter((e) => monthKey(e.date) === mk);
   const companyExpenses = expenses.filter((e) => e.kind === 'company');
   const personalExpenses = expenses.filter((e) => e.kind !== 'company');
@@ -95,7 +118,7 @@ export function monthSummary(state, mk) {
 
 // Total money received since the first installation (الرصيد).
 export function totalReceivedAllTime(state) {
-  const months = [...new Set(state.installations.map((i) => monthKey(startOfWeek(i.date))))];
+  const months = [...new Set(state.installations.map((i) => monthKey(i.date)))];
   return months.reduce((s, mk) => s + monthSummary(state, mk).received, 0);
 }
 
@@ -140,5 +163,3 @@ export function buildVisits(state) {
 
   return [...installs, ...expenses].sort((a, b) => b.date.localeCompare(a.date));
 }
-
-export { money };
