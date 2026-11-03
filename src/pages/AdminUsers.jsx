@@ -6,7 +6,7 @@ import { useAuth } from '../auth';
 import { Badge, Card, DataTable, Field, Modal, PageHeader } from '../components/ui';
 
 const fmtDate = (iso) => new Date(iso).toLocaleDateString('ar-EG', { dateStyle: 'medium' });
-const emptyForm = { email: '', fullName: '', password: '' };
+const emptyForm = { username: '', fullName: '', password: '' };
 
 export default function AdminUsers() {
   const { profile: me } = useAuth();
@@ -31,7 +31,6 @@ export default function AdminUsers() {
     load();
   }, []);
 
-  // Runs an admin action, then reloads the list.
   const run = async (fn, okMessage) => {
     setBusy(true);
     setError('');
@@ -51,12 +50,16 @@ export default function AdminUsers() {
 
   const create = async (e) => {
     e.preventDefault();
-    if (!form.email.includes('@')) return setError('اكتب إيميل صحيح');
+    const username = form.username.trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
+      return setError('اسم المستخدم لازم يكون 3 لـ 30 حرف إنجليزي أو أرقام أو . _ -');
+    }
     if (!form.fullName.trim()) return setError('اكتب اسم الفني');
     if (form.password.length < 8) return setError('الباسورد لازم تكون 8 حروف على الأقل');
+
     const ok = await run(
-      () => adminCall({ action: 'create', ...form }),
-      'اتضاف المستخدم. ابعتله الإيميل والباسورد.'
+      () => adminCall({ action: 'create', username, fullName: form.fullName.trim(), password: form.password }),
+      `اتضاف المستخدم. اسم الدخول: ${username}`
     );
     if (ok) setForm(emptyForm);
   };
@@ -93,14 +96,16 @@ export default function AdminUsers() {
       render: (u) => (
         <div>
           <strong>{u.full_name}</strong>
-          <div className="meta">{u.email}</div>
+          <div className="meta">{u.username ? `@${u.username}` : u.email}</div>
         </div>
       ),
     },
     {
       key: 'role',
       label: 'الدور',
-      render: (u) => <Badge tone={u.role === 'admin' ? 'warning' : 'neutral'}>{u.role === 'admin' ? 'أدمن' : 'فني'}</Badge>,
+      render: (u) => (
+        <Badge tone={u.role === 'admin' ? 'warning' : 'neutral'}>{u.role === 'admin' ? 'أدمن' : 'فني'}</Badge>
+      ),
     },
     {
       key: 'active',
@@ -125,11 +130,23 @@ export default function AdminUsers() {
           <Field label="الاسم">
             <input className="input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
           </Field>
-          <Field label="الإيميل">
-            <input type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Field label="اسم المستخدم (للدخول)">
+            <input
+              className="input"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              autoCapitalize="none"
+              placeholder="مثال: ahmed.tech"
+            />
           </Field>
           <Field label="الباسورد المبدئية (8 حروف على الأقل)" full>
-            <input type="text" className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
+            <input
+              type="text"
+              className="input"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              autoComplete="new-password"
+            />
           </Field>
           <div className="full">
             <button className="btn primary" type="submit" disabled={busy}>
@@ -159,7 +176,10 @@ export default function AdminUsers() {
                 </button>
                 <button
                   className="icon-btn"
-                  onClick={() => { setResetFor(u); setError(''); }}
+                  onClick={() => {
+                    setResetFor(u);
+                    setError('');
+                  }}
                   disabled={self || busy}
                   aria-label="تغيير الباسورد"
                   title="تغيير الباسورد"
@@ -186,7 +206,13 @@ export default function AdminUsers() {
         {error && <p className="alert alert-danger" role="alert">{error}</p>}
         <form id="reset-form" onSubmit={resetPassword} noValidate>
           <Field label="الباسورد الجديدة (8 حروف على الأقل)">
-            <input type="text" className="input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+            <input
+              type="text"
+              className="input"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+            />
           </Field>
         </form>
       </Modal>

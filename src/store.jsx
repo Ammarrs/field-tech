@@ -7,6 +7,7 @@ const EMPTY = {
   branches: [],
   installations: [],
   expenses: [],
+  categories: [],
   payments: { weeks: {}, months: {} },
 };
 
@@ -30,24 +31,35 @@ const mapInstall = (r) => ({
   printers: Number(r.printers), rate: Number(r.rate),
 });
 const mapExpense = (r) => ({
-  id: r.id, date: r.date, governorate: r.governorate, branchId: r.branch_id ?? '',
-  placeVisited: r.place_visited ?? '', transport: Number(r.transport) || 0,
-  tools: Array.isArray(r.tools) ? r.tools : [],
+  id: r.id, date: r.date, category: r.category, kind: r.kind,
+  governorate: r.governorate ?? '', branchId: r.branch_id ?? '',
+  fromPlace: r.from_place ?? '', toPlace: r.to_place ?? '',
+  itemName: r.item_name ?? '', description: r.description ?? '',
+  amount: Number(r.amount) || 0,
 });
+const toExpenseRow = (x, userId) => ({
+  id: x.id, user_id: userId, date: x.date, category: x.category, kind: x.kind,
+  governorate: x.governorate, branch_id: x.branchId || null,
+  from_place: x.fromPlace || null, to_place: x.toPlace || null,
+  item_name: x.itemName || null, description: x.description || null,
+  amount: x.amount,
+});
+const mapPayment = (r) => ({ amount: Number(r.received_amount) || 0, covered: !!r.covered });
 const fromRows = (rows, keyField) =>
-  Object.fromEntries((rows || []).map((r) => [r[keyField], r.paid]));
+  Object.fromEntries((rows || []).map((r) => [r[keyField], mapPayment(r)]));
 
 async function loadAll(userId) {
   const byUser = (table) => supabase.from(table).select('*').eq('user_id', userId);
-  const [b, i, e, pw, pm, s] = await Promise.all([
+  const [b, i, e, c, pw, pm, s] = await Promise.all([
     byUser('branches'),
     byUser('installations'),
     byUser('expenses'),
+    byUser('expense_categories'),
     byUser('payment_weeks'),
     byUser('payment_months'),
     supabase.from('settings').select('*').eq('user_id', userId).maybeSingle(),
   ]);
-  for (const res of [b, i, e, pw, pm, s]) if (res.error) throw res.error;
+  for (const res of [b, i, e, c, pw, pm, s]) if (res.error) throw res.error;
 
   return {
     settings: {
@@ -57,6 +69,7 @@ async function loadAll(userId) {
     branches: b.data.map(mapBranch),
     installations: i.data.map(mapInstall),
     expenses: e.data.map(mapExpense),
+    categories: c.data.map((r) => ({ id: r.id, name: r.name })),
     payments: {
       weeks: fromRows(pw.data, 'week_start'),
       months: fromRows(pm.data, 'month_key'),
@@ -100,7 +113,7 @@ export function StoreProvider({ userId, children }) {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  // Writes go to Supabase. On failure the error is shown and the data is reloaded from the server.
+  // Writes go to Supabase. On failure, show the error and reload from the server.
   const run = async (request, { reloadAfter = false } = {}) => {
     const { error: e } = await request;
     if (e) {
@@ -157,22 +170,23 @@ export function StoreProvider({ userId, children }) {
     saveExpense: (r) => {
       const item = { ...r, id: r.id || newId() };
       setData((d) => ({ ...d, expenses: upsert(d.expenses, item) }));
-      return run(
-        supabase.from('expenses').upsert({
-          id: item.id,
-          user_id: userId,
-          date: item.date,
-          governorate: item.governorate,
-          branch_id: item.branchId || null,
-          place_visited: item.placeVisited || null,
-          transport: item.transport || 0,
-          tools: item.tools || [],
-        })
-      );
+      return run(supabase.from('expenses').upsert(toExpenseRow(item, userId)));
     },
     deleteExpense: (id) => {
       setData((d) => ({ ...d, expenses: d.expenses.filter((x) => x.id !== id) }));
       return run(supabase.from('expenses').delete().eq('id', id));
+    },
+
+    saveCategory: (name) => {
+      const item = { id: newId(), name };
+      setData((d) => ({ ...d, categories: [...d.categories, item] }));
+      return run(
+        supabase.from('expense_categories').insert({ id: item.id, user_id: userId, name })
+      );
+    },
+    deleteCategory: (id) => {
+      setData((d) => ({ ...d, categories: d.categories.filter((x) => x.id !== id) }));
+      return run(supabase.from('expense_categories').delete().eq('id', id));
     },
 
     setSettings: (patch) => {
@@ -183,36 +197,42 @@ export function StoreProvider({ userId, children }) {
       return run(supabase.from('settings').upsert(row, { onConflict: 'user_id' }));
     },
 
-    toggleWeekPaid: (key) => {
-      const next = !dataRef.current.payments.weeks[key];
+    // entry = { amount, covered }
+    setWeekPayment: (key, entry) => {
+      const next = { amount: Number(entry.amount) || 0, covered: !!entry.covered };
       setData((d) => ({
         ...d,
         payments: { ...d.payments, weeks: { ...d.payments.weeks, [key]: next } },
       }));
       return run(
-        supabase
-          .from('payment_weeks')
-          .upsert({ user_id: userId, week_start: key, paid: next }, { onConflict: 'user_id,week_start' })
+        supabase.from('payment_weeks').upsert(
+          { user_id: userId, week_start: key, received_amount: next.amount, covered: next.covered },
+          { onConflict: 'user_id,week_start' }
+        )
       );
     },
 
-    toggleMonthPaid: (key) => {
-      const next = !dataRef.current.payments.months[key];
+    setMonthPayment: (key, entry) => {
+      const next = { amount: Number(entry.amount) || 0, covered: !!entry.covered };
       setData((d) => ({
         ...d,
         payments: { ...d.payments, months: { ...d.payments.months, [key]: next } },
       }));
       return run(
-        supabase
-          .from('payment_months')
-          .upsert({ user_id: userId, month_key: key, paid: next }, { onConflict: 'user_id,month_key' })
+        supabase.from('payment_months').upsert(
+          { user_id: userId, month_key: key, received_amount: next.amount, covered: next.covered },
+          { onConflict: 'user_id,month_key' }
+        )
       );
     },
 
     toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
 
     resetAll: async () => {
-      const tables = ['installations', 'expenses', 'branches', 'payment_weeks', 'payment_months', 'settings'];
+      const tables = [
+        'installations', 'expenses', 'expense_categories', 'branches',
+        'payment_weeks', 'payment_months', 'settings',
+      ];
       for (const t of tables) {
         const { error: e } = await supabase.from(t).delete().eq('user_id', userId);
         if (e) {

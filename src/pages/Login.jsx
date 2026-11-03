@@ -2,25 +2,26 @@ import { useState } from 'react';
 import { Printer } from 'lucide-react';
 import { useAuth } from '../auth';
 import { Field } from '../components/ui';
+import { toLoginEmail } from '../lib/account';
 
 export default function Login() {
   const { signIn, notice } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!email.trim() || !password) return setError('اكتب الإيميل والباسورد');
+    if (!username.trim() || !password) return setError('اكتب اسم المستخدم والباسورد');
     setBusy(true);
     setError('');
-    const err = await signIn(email.trim(), password);
+    const err = await signIn(toLoginEmail(username), password);
     setBusy(false);
     if (err) {
       setError(
         /invalid/i.test(err.message)
-          ? 'الإيميل أو الباسورد غلط'
+          ? 'اسم المستخدم أو الباسورد غلط'
           : 'حصلت مشكلة في تسجيل الدخول، حاول تاني'
       );
     }
@@ -39,13 +40,14 @@ export default function Login() {
 
         {notice && <p className="alert alert-danger">{notice}</p>}
 
-        <Field label="الإيميل">
+        <Field label="اسم المستخدم">
           <input
-            type="email"
-            autoComplete="email"
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
             className="input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
           />
         </Field>
         <Field label="كلمة السر">

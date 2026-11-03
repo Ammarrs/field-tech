@@ -1,7 +1,9 @@
+// @ts-nocheck
 // Edge Function: admin user management.
-// Deploy: supabase functions deploy admin-users
-// Supabase provides SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to functions automatically.
+// Deploy: npx supabase functions deploy admin-users
 import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const USERNAME_DOMAIN = 'fieldtech.app';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,7 +24,6 @@ Deno.serve(async (req) => {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) return json({ error: 'Unauthorized' }, 401);
 
-  // Service role client: bypasses RLS. Used only after the caller is verified as an admin.
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -44,23 +45,30 @@ Deno.serve(async (req) => {
   const action = body.action;
 
   if (action === 'create') {
-    const email = String(body.email || '').trim().toLowerCase();
-    const password = String(body.password || '');
+    const username = String(body.username || '').trim().toLowerCase();
     const fullName = String(body.fullName || '').trim();
-    if (!email.includes('@')) return json({ error: 'الإيميل مش صحيح' }, 400);
+    const password = String(body.password || '');
+
+    if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
+      return json({ error: 'اسم المستخدم لازم يكون 3 لـ 30 حرف إنجليزي أو أرقام أو . _ -' }, 400);
+    }
     if (!fullName) return json({ error: 'اكتب الاسم' }, 400);
     if (password.length < 8) return json({ error: 'الباسورد لازم تكون 8 حروف على الأقل' }, 400);
+
+    const email = `${username}@${USERNAME_DOMAIN}`;
 
     const { data: created, error } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
+      user_metadata: { username },
     });
     if (error) return json({ error: error.message }, 400);
 
     const { error: pErr } = await admin.from('profiles').insert({
       id: created.user.id,
       email,
+      username,
       full_name: fullName,
       role: 'technician',
       active: true,
@@ -68,7 +76,7 @@ Deno.serve(async (req) => {
     if (pErr) {
       // Roll back so we don't leave an auth user without a profile.
       await admin.auth.admin.deleteUser(created.user.id);
-      return json({ error: pErr.message }, 400);
+      return json({ error: pErr.message.includes('duplicate') ? 'اسم المستخدم ده موجود' : pErr.message }, 400);
     }
     return json({ ok: true, id: created.user.id });
   }
@@ -81,7 +89,6 @@ Deno.serve(async (req) => {
     const active = Boolean(body.active);
     const { error: pErr } = await admin.from('profiles').update({ active }).eq('id', userId);
     if (pErr) return json({ error: pErr.message }, 400);
-    // A banned user cannot sign in or refresh their session.
     const { error } = await admin.auth.admin.updateUserById(userId, {
       ban_duration: active ? 'none' : '876000h',
     });

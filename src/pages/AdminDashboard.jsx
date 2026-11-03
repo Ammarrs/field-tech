@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import {
-  Badge, Card, DataTable, EmptyState, KpiCard, PageHeader, SearchInput,
-} from '../components/ui';
-import { expenseTotal, installAmount } from '../lib/calc';
+import { Badge, Card, DataTable, EmptyState, KpiCard, PageHeader, SearchInput } from '../components/ui';
+import { expenseAmount, installAmount } from '../lib/calc';
 import { money } from '../lib/format';
 
 async function fetchAll() {
   const [p, b, i, e] = await Promise.all([
-    supabase.from('profiles').select('id, email, full_name, role, active, created_at'),
+    supabase.from('profiles').select('id, email, username, full_name, role, active, created_at'),
     supabase.from('branches').select('id, user_id, name, governorate, created_at'),
     supabase.from('installations').select('id, user_id, date, printers, rate, branch_id, created_at'),
-    supabase.from('expenses').select('id, user_id, date, governorate, transport, tools, place_visited, created_at'),
+    supabase
+      .from('expenses')
+      .select('id, user_id, date, category, kind, governorate, from_place, to_place, item_name, description, amount, created_at'),
   ]);
   for (const r of [p, b, i, e]) if (r.error) throw r.error;
   return { profiles: p.data, branches: b.data, installations: i.data, expenses: e.data };
@@ -20,8 +20,13 @@ async function fetchAll() {
 
 const fmtTime = (iso) => new Date(iso).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
 
-// Builds one row per user with totals and an activity log (newest first).
-// "At" is the time the record was created.
+const expenseText = (e) => {
+  if (e.category === 'transport') return `من ${e.from_place || '—'} إلى ${e.to_place || '—'}`;
+  if (e.category === 'tools') return e.item_name || 'أداة';
+  return e.description || 'مصروف';
+};
+
+// One row per user, with totals and an activity log (newest first). "At" is the creation time.
 function buildUserStats({ profiles, branches, installations, expenses }) {
   const branchById = Object.fromEntries(branches.map((b) => [b.id, b]));
 
@@ -41,8 +46,8 @@ function buildUserStats({ profiles, branches, installations, expenses }) {
         ...exp.map((e) => ({
           id: `e-${e.id}`,
           at: e.created_at,
-          kind: 'مصروف',
-          text: `${e.place_visited || e.governorate} · ${money(expenseTotal(e))}`,
+          kind: e.kind === 'company' ? 'أداة/مصروف شركة' : 'مصروف شخصي',
+          text: `${expenseText(e)} · ${money(expenseAmount(e))}`,
         })),
         ...br.map((b) => ({
           id: `b-${b.id}`,
@@ -57,7 +62,7 @@ function buildUserStats({ profiles, branches, installations, expenses }) {
         branchCount: br.length,
         printers: inst.reduce((s, x) => s + Number(x.printers), 0),
         earned: inst.reduce((s, x) => s + installAmount(x), 0),
-        expenses: exp.reduce((s, x) => s + expenseTotal(x), 0),
+        expenses: exp.reduce((s, x) => s + expenseAmount(x), 0),
         lastAt: activity[0]?.at ?? null,
         activity,
       };
@@ -91,7 +96,7 @@ export default function AdminDashboard() {
   const filtered = useMemo(
     () =>
       (users || []).filter((u) =>
-        `${u.full_name} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase())
+        `${u.full_name} ${u.username ?? ''} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase())
       ),
     [users, q]
   );
@@ -115,16 +120,14 @@ export default function AdminDashboard() {
       render: (u) => (
         <div>
           <strong>{u.full_name}</strong>
-          <div className="meta">{u.email}</div>
+          <div className="meta">{u.username ? `@${u.username}` : u.email}</div>
         </div>
       ),
     },
     {
       key: 'status',
       label: 'الحالة',
-      render: (u) => (
-        <Badge tone={u.active ? 'success' : 'danger'}>{u.active ? 'نشط' : 'موقوف'}</Badge>
-      ),
+      render: (u) => <Badge tone={u.active ? 'success' : 'danger'}>{u.active ? 'نشط' : 'موقوف'}</Badge>,
     },
     { key: 'branchCount', label: 'الفروع' },
     { key: 'printers', label: 'الطابعات' },
@@ -137,7 +140,7 @@ export default function AdminDashboard() {
     <>
       <PageHeader
         title="نشاط المستخدمين"
-        subtitle="كل فني وعمل إيه وإمتى"
+        subtitle="كل فني عمل إيه وإمتى"
         action={
           <button className="btn" onClick={load} disabled={loading}>
             <RefreshCw size={16} aria-hidden="true" /> تحديث
@@ -156,7 +159,7 @@ export default function AdminDashboard() {
 
       <Card>
         <div className="toolbar">
-          <SearchInput value={q} onChange={setQ} placeholder="ابحث بالاسم أو الإيميل" />
+          <SearchInput value={q} onChange={setQ} placeholder="ابحث بالاسم أو اسم المستخدم" />
         </div>
         {users && filtered.length ? (
           <DataTable
@@ -164,11 +167,7 @@ export default function AdminDashboard() {
             rows={filtered}
             rowKey={(u) => u.id}
             actions={(u) => (
-              <button
-                className="btn small"
-                onClick={() => setSelectedId(u.id)}
-                aria-pressed={selectedId === u.id}
-              >
+              <button className="btn small" onClick={() => setSelectedId(u.id)} aria-pressed={selectedId === u.id}>
                 عرض النشاط
               </button>
             )}
@@ -184,9 +183,7 @@ export default function AdminDashboard() {
       {selected && (
         <Card
           title={`نشاط ${selected.full_name}`}
-          action={
-            <button className="btn ghost small" onClick={() => setSelectedId(null)}>إغلاق</button>
-          }
+          action={<button className="btn ghost small" onClick={() => setSelectedId(null)}>إغلاق</button>}
         >
           {selected.activity.length ? (
             <ul className="timeline">
@@ -196,7 +193,7 @@ export default function AdminDashboard() {
                     <strong>{a.text}</strong>
                     <div className="meta">{fmtTime(a.at)}</div>
                   </div>
-                  <Badge tone={a.kind === 'تركيب' ? 'success' : a.kind === 'مصروف' ? 'warning' : 'neutral'}>
+                  <Badge tone={a.kind === 'تركيب' ? 'success' : a.kind === 'فرع جديد' ? 'neutral' : 'warning'}>
                     {a.kind}
                   </Badge>
                 </li>
